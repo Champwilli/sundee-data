@@ -2,7 +2,8 @@ name: Fetch Sundee Data
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    # Kjoer hvert 30 minutt for live data
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:
