@@ -94,45 +94,7 @@ def upsert_rows(table, rows, conflict_cols):
     print(f"Upserted {len(rows)} rows into {table}")
     return response
 
-if __name__ == "__main__":
-    try:
-        print("Fetching power prices...")
-        prices = fetch_power_prices()
-        upsert_rows("power_prices", prices, "zone,hour")
-    except Exception as e:
-        print(f"Error fetching power prices: {e}")
 
-    try:
-        print("Fetching reservoir levels...")
-        levels = fetch_reservoir_levels()
-        upsert_rows("reservoir_levels", levels, "region,year,week")
-    except Exception as e:
-        print(f"Error fetching reservoir levels: {e}")
-
-    try:
-        print("Fetching reservoir zones per NO1-NO5...")
-        zones = fetch_reservoir_zones()
-        upsert_rows("reservoir_zones", zones, "zone,week_number,year")
-    except Exception as e:
-        print(f"Error fetching reservoir zones: {e}")
-
-    try:
-        print("Fetching spot prices to new table...")
-        spot = fetch_spot_prices_new()
-        upsert_rows("spot_prices", spot, "timestamp_utc,zone")
-    except Exception as e:
-        print(f"Error fetching spot prices: {e}")
-
-    try:
-        print("Fetching news items...")
-        news = fetch_news_items()
-        if news:
-            supabase.table("news_items").insert(news).execute()
-            print(f"Inserted {len(news)} news items")
-    except Exception as e:
-        print(f"Error fetching news items: {e}")
-
-    print("Done.")
 
 # ============================================================
 # NYE FUNKSJONER FOR SUNDEE V2
@@ -244,3 +206,44 @@ def fetch_news_items():
             print(f"Feil ved henting fra {src['name']}: {e}")
     return rows
 
+
+
+if __name__ == "__main__":
+    try:
+        print("Fetching power prices...")
+        prices = fetch_power_prices()
+        upsert_rows("power_prices", prices, "zone,hour")
+    except Exception as e:
+        print(f"Error fetching power prices: {e}")
+
+    try:
+        print("Fetching reservoir levels...")
+        levels = fetch_reservoir_levels()
+        upsert_rows("reservoir_levels", levels, "region,year,week")
+    except Exception as e:
+        print(f"Error fetching reservoir levels: {e}")
+
+    try:
+        print("Fetching reservoir zones per NO1-NO5...")
+        zones = fetch_reservoir_zones()
+        upsert_rows("reservoir_zones", zones, "zone,week_number,year")
+    except Exception as e:
+        print(f"Error fetching reservoir zones: {e}")
+
+    try:
+        print("Fetching spot prices to new table...")
+        spot = fetch_spot_prices_new()
+        upsert_rows("spot_prices", spot, "timestamp_utc,zone")
+    except Exception as e:
+        print(f"Error fetching spot prices: {e}")
+
+    try:
+        print("Fetching news items...")
+        news = fetch_news_items()
+        if news:
+            supabase.table("news_items").insert(news).execute()
+            print(f"Inserted {len(news)} news items")
+    except Exception as e:
+        print(f"Error fetching news items: {e}")
+
+    print("Done.")
