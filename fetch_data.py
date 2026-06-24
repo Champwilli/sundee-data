@@ -69,7 +69,7 @@ def fetch_reservoir_levels():
             "region": region,
                         "year": rec.get("iso_aar"),
                         "week": rec.get("iso_uke"),
-                        "fill_pct": rec.get("fyllingsgrad"),
+                                    "fill_pct": round(rec.get("fyllingsgrad", 0) * 100, 1),
             "fetched_at": now_utc()
         })
 
