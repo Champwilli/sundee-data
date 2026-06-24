@@ -42,7 +42,7 @@ def fetch_power_prices():
     return list(latest_by_zone.values())
 
 def fetch_reservoir_levels():
-        url = "https://biapi.nve.no/magasinstatistikk/api/MagasinStatistikk?IncludeProperties=all"
+            url = "https://biapi.nve.no/magasinstatistikk/api/Magasinstatistikk/HentOffentligDataSisteUke"
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     data = r.json()
@@ -67,9 +67,9 @@ def fetch_reservoir_levels():
 
         rows.append({
             "region": region,
-            "year": rec.get("aar"),
-            "week": rec.get("uke"),
-            "fill_pct": rec.get("fyllingsgrad"),
+                        "year": rec.get("iso_aar"),
+                        "week": rec.get("iso_uke"),
+                        "fill_pct": rec.get("fyllingsgrad"),
             "fetched_at": now_utc()
         })
 
@@ -102,7 +102,7 @@ def upsert_rows(table, rows, conflict_cols):
 
 def fetch_reservoir_zones():
     """Henter magasinfylling per NO-sone fra NVE og skriver til reservoir_zones."""
-        url = "https://biapi.nve.no/magasinstatistikk/api/MagasinStatistikk?IncludeProperties=all"
+            url = "https://biapi.nve.no/magasinstatistikk/api/Magasinstatistikk/HentOffentligDataSisteUke"
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     data = r.json()
@@ -117,12 +117,12 @@ def fetch_reservoir_zones():
             continue
         rows.append({
             "zone": zone,
-            "week_number": rec.get("uke"),
-            "year": rec.get("aar"),
-            "fill_pct": rec.get("fyllingsgrad"),
-            "median_pct": rec.get("medianFyllingsgrad"),
-            "min_pct": rec.get("minFyllingsgrad"),
-            "max_pct": rec.get("maxFyllingsgrad"),
+                        "week_number": rec.get("iso_uke"),
+                        "year": rec.get("iso_aar"),
+                        "fill_pct": round(rec.get("fyllingsgrad", 0) * 100, 1),
+                        "median_pct": None,
+                        "min_pct": None,
+                        "max_pct": None,
             "source": "NVE",
             "fetched_at": now_utc()
         })
