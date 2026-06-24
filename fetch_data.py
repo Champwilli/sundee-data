@@ -102,6 +102,20 @@ if __name__ == "__main__":
     print("Fetching reservoir levels...")
     levels = fetch_reservoir_levels()
     upsert_rows("reservoir_levels", levels, "region,year,week")
+    
+    print("Fetching reservoir zones per NO1-NO5...")
+    zones = fetch_reservoir_zones()
+    upsert_rows("reservoir_zones", zones, "zone,week_number,year")
+
+    print("Fetching spot prices to new table...")
+    spot = fetch_spot_prices_new()
+    upsert_rows("spot_prices", spot, "timestamp_utc,zone")
+
+    print("Fetching news items...")
+    news = fetch_news_items()
+    if news:
+        supabase.table("news_items").insert(news).execute()
+        print(f"Inserted {len(news)} news items")
 
     print("Done.")
 
@@ -216,20 +230,3 @@ def fetch_news_items():
             print(f"Feil ved henting fra {src['name']}: {e}")
     return rows
 
-
-    # Kjor nye V2-funksjoner
-    print("Fetching reservoir zones per NO1-NO5...")
-    zones = fetch_reservoir_zones()
-    upsert_rows("reservoir_zones", zones, "zone,week_number,year")
-
-    print("Fetching spot prices to new table...")
-    spot = fetch_spot_prices_new()
-    upsert_rows("spot_prices", spot, "timestamp_utc,zone")
-
-    print("Fetching news items...")
-    news = fetch_news_items()
-    if news:
-        supabase.table("news_items").insert(news).execute()
-        print(f"Inserted {len(news)} news items")
-
-    print("Sundee V2 fetch complete.")
