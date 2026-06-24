@@ -16,62 +16,68 @@ def now_utc():
 
 
 # -- SPOT PRICES (Energi Data Service) --
-# Henter siste 500 timer for alle NO1-NO5 soner
-# requests.get med params-dict for korrekt URL-encoding
+# Henter siste 100 timer PER sone (5 separate API-kall) for garantert dekning
 def fetch_power_prices():
-    params = {
-        "limit": 500,
-        "filter": '{"PriceArea":["NO1","NO2","NO3","NO4","NO5"]}',
-        "sort": "HourDK DESC"
-    }
-    r = requests.get(
-        "https://api.energidataservice.dk/dataset/Elspotprices",
-        params=params,
-        timeout=30
-    )
-    r.raise_for_status()
-    records = r.json().get("records", [])
-
-    rows = []
-    seen = set()
-    for rec in records:
-        zone = rec.get("PriceArea")
-        hour_dk = rec.get("HourDK")
-        if zone not in PRICE_AREAS or not hour_dk:
-            continue
-        key = (zone, hour_dk)
-        if key in seen:
-            continue
-        seen.add(key)
+    all_rows = []
+    for zone in PRICE_AREAS:
         try:
-            dt_local = datetime.fromisoformat(hour_dk)
-            dt_utc = dt_local.replace(tzinfo=timezone(timedelta(hours=2)))
-            timestamp_utc = dt_utc.astimezone(timezone.utc).isoformat()
-        except Exception:
-            timestamp_utc = now_utc()
-        price_dkk = rec.get("SpotPriceDKK")
-        price_eur = rec.get("SpotPriceEUR")
-        price_ore_kwh = round(price_dkk / 10, 2) if price_dkk is not None else None
-        price_eur_mwh = round(price_eur, 2) if price_eur is not None else None
-        rows.append({
-            "timestamp_utc": timestamp_utc,
-            "zone": zone,
-            "price_ore_kwh": price_ore_kwh,
-            "price_eur_mwh": price_eur_mwh,
-            "hour": hour_dk,
-            "fetched_at": now_utc()
-        })
-    return rows
+            params = {
+                "limit": 100,
+                "filter": '{"PriceArea":"' + zone + '"}',
+                "sort": "HourDK DESC"
+            }
+            r = requests.get(
+                "https://api.energidataservice.dk/dataset/Elspotprices",
+                params=params,
+                timeout=30
+            )
+            r.raise_for_status()
+            records = r.json().get("records", [])
+            zone_rows = 0
+            for rec in records:
+                hour_dk = rec.get("HourDK")
+                if not hour_dk:
+                    continue
+                try:
+                    dt_local = datetime.fromisoformat(hour_dk)
+                    # HourDK er norsk lokaltid (CET/CEST). Vi bruker UTC+1 som konservativ offset.
+                    dt_utc = dt_local.replace(tzinfo=timezone(timedelta(hours=1)))
+                    timestamp_utc = dt_utc.astimezone(timezone.utc).isoformat()
+                except Exception:
+                    timestamp_utc = now_utc()
+                price_dkk = rec.get("SpotPriceDKK")
+                price_eur = rec.get("SpotPriceEUR")
+                price_ore_kwh = round(price_dkk / 10, 2) if price_dkk is not None else None
+                price_eur_mwh = round(price_eur, 2) if price_eur is not None else None
+                all_rows.append({
+                    "timestamp_utc": timestamp_utc,
+                    "zone": zone,
+                    "price_ore_kwh": price_ore_kwh,
+                    "price_eur_mwh": price_eur_mwh,
+                    "hour": hour_dk,
+                    "fetched_at": now_utc()
+                })
+                zone_rows += 1
+            print(f"  {zone}: {zone_rows} rader hentet")
+        except Exception as e:
+            print(f"  ERROR henting av {zone}: {e}")
+    return all_rows
 
 
 def upsert_power_prices(rows):
     if not rows:
         print("No price rows to upsert.")
         return
-    supabase.table("spot_prices").upsert(
-        rows, on_conflict="timestamp_utc,zone"
-    ).execute()
-    print(f"Upserted {len(rows)} price rows.")
+    # Upsert i batches av 200 for aa unngaa timeouts
+    batch_size = 200
+    total = 0
+    for i in range(0, len(rows), batch_size):
+        batch = rows[i:i + batch_size]
+        supabase.table("spot_prices").upsert(
+            batch, on_conflict="timestamp_utc,zone"
+        ).execute()
+        total += len(batch)
+    print(f"Upserted {total} price rows.")
 
 
 # -- RESERVOIR LEVELS (NVE Magasinstatistikk) --
@@ -80,7 +86,6 @@ def fetch_reservoir_levels():
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     data = r.json()
-
     zone_map = {1: "NO1", 2: "NO2", 3: "NO3", 4: "NO4", 5: "NO5"}
     rows = []
     for rec in data:
@@ -105,7 +110,6 @@ def fetch_reservoir_levels():
             "fill_pct": fill_pct,
             "fetched_at": now_utc()
         })
-
     latest_rows = {}
     for row in sorted(rows, key=lambda x: (x["year"] or 0, x["week"] or 0), reverse=True):
         region = row["region"]
@@ -128,9 +132,9 @@ def upsert_reservoir_levels(rows):
 NEWS_FEEDS = [
     {"url": "https://energifakta.no/feed/", "source": "Energifakta", "category": "market"},
     {"url": "https://www.ssb.no/rss/energi", "source": "SSB Energi", "category": "market"},
-    {"url": "https://www.regjeringen.no/en/rss/rss_olje_energi/", "source": "OED", "category": "grid"},
-    {"url": "https://www.nve.no/rss/nyheter/", "source": "NVE", "category": "grid"},
+    {"url": "https://www.nve.no/rss/nyheter", "source": "NVE", "category": "grid"},
     {"url": "https://e24.no/rss2/", "source": "E24", "category": "market"},
+    {"url": "https://www.tu.no/rss", "source": "Teknisk Ukeblad", "category": "grid"},
 ]
 
 
@@ -227,7 +231,7 @@ if __name__ == "__main__":
     print("--- Fetching power prices ---")
     try:
         price_rows = fetch_power_prices()
-        print(f"Fetched {len(price_rows)} price rows (alle soner, siste timer).")
+        print(f"Fetched {len(price_rows)} price rows (alle soner, siste 100 timer).")
         upsert_power_prices(price_rows)
     except Exception as e:
         print(f"ERROR in fetch_power_prices: {e}")
