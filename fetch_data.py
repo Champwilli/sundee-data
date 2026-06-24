@@ -42,7 +42,7 @@ def fetch_power_prices():
     return list(latest_by_zone.values())
 
 def fetch_reservoir_levels():
-    url = "https://nvebiapi.nve.no/api/Magasinstatistikk/HentOffentligData"
+        url = "https://biapi.nve.no/magasinstatistikk/api/MagasinStatistikk?IncludeProperties=all"
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     data = r.json()
@@ -102,7 +102,7 @@ def upsert_rows(table, rows, conflict_cols):
 
 def fetch_reservoir_zones():
     """Henter magasinfylling per NO-sone fra NVE og skriver til reservoir_zones."""
-    url = "https://nvebiapi.nve.no/api/MagasinStatistikk/HentOffentligData"
+        url = "https://biapi.nve.no/magasinstatistikk/api/MagasinStatistikk?IncludeProperties=all"
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     data = r.json()
@@ -240,9 +240,15 @@ if __name__ == "__main__":
     try:
         print("Fetching news items...")
         news = fetch_news_items()
-        if news:
-            supabase.table("news_items").insert(news).execute()
-            print(f"Inserted {len(news)} news items")
+                # Dedup: fetch existing source_urls before inserting
+            existing = supabase.table("news_items").select("source_url").execute()
+            existing_urls = {r["source_url"] for r in (existing.data or [])}
+            new_items = [n for n in news if n.get("source_url") not in existing_urls]
+            if new_items:
+                supabase.table("news_items").insert(new_items).execute()
+                print(f"Inserted {len(new_items)} new news items (skipped {len(news)-len(new_items)} duplicates)")
+            else:
+                print("No new news items to insert")
     except Exception as e:
         print(f"Error fetching news items: {e}")
 
