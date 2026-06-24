@@ -19,16 +19,19 @@ def now_utc():
 # Henter siste 5 timer per sone (NO1-NO5) fra dansk energidataservice
 # Upsert paa timestamp_utc + zone (unik per time per sone)
 def fetch_power_prices():
+    # Hent siste 2 dager for aa sikre alle 5 soner
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M")
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M")
     url = (
         "https://api.energidataservice.dk/dataset/Elspotprices"
-        "?limit=50"
+        "?limit=250"
         "&filter=%7B%22PriceArea%22:%5B%22NO1%22,%22NO2%22,%22NO3%22,%22NO4%22,%22NO5%22%5D%7D"
+        f"&start={yesterday}&end={today}"
         "&sort=HourDK%20DESC"
     )
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     records = r.json().get("records", [])
-
     rows = []
     seen = set()
     for rec in records:
