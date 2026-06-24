@@ -95,30 +95,44 @@ def upsert_rows(table, rows, conflict_cols):
     return response
 
 if __name__ == "__main__":
-    print("Fetching power prices...")
-    prices = fetch_power_prices()
-    upsert_rows("power_prices", prices, "zone,hour")
+    try:
+        print("Fetching power prices...")
+        prices = fetch_power_prices()
+        upsert_rows("power_prices", prices, "zone,hour")
+    except Exception as e:
+        print(f"Error fetching power prices: {e}")
 
-    print("Fetching reservoir levels...")
-    levels = fetch_reservoir_levels()
-    upsert_rows("reservoir_levels", levels, "region,year,week")
-    
-    print("Fetching reservoir zones per NO1-NO5...")
-    zones = fetch_reservoir_zones()
-    upsert_rows("reservoir_zones", zones, "zone,week_number,year")
+    try:
+        print("Fetching reservoir levels...")
+        levels = fetch_reservoir_levels()
+        upsert_rows("reservoir_levels", levels, "region,year,week")
+    except Exception as e:
+        print(f"Error fetching reservoir levels: {e}")
 
-    print("Fetching spot prices to new table...")
-    spot = fetch_spot_prices_new()
-    upsert_rows("spot_prices", spot, "timestamp_utc,zone")
+    try:
+        print("Fetching reservoir zones per NO1-NO5...")
+        zones = fetch_reservoir_zones()
+        upsert_rows("reservoir_zones", zones, "zone,week_number,year")
+    except Exception as e:
+        print(f"Error fetching reservoir zones: {e}")
 
-    print("Fetching news items...")
-    news = fetch_news_items()
-    if news:
-        supabase.table("news_items").insert(news).execute()
-        print(f"Inserted {len(news)} news items")
+    try:
+        print("Fetching spot prices to new table...")
+        spot = fetch_spot_prices_new()
+        upsert_rows("spot_prices", spot, "timestamp_utc,zone")
+    except Exception as e:
+        print(f"Error fetching spot prices: {e}")
+
+    try:
+        print("Fetching news items...")
+        news = fetch_news_items()
+        if news:
+            supabase.table("news_items").insert(news).execute()
+            print(f"Inserted {len(news)} news items")
+    except Exception as e:
+        print(f"Error fetching news items: {e}")
 
     print("Done.")
-
 
 # ============================================================
 # NYE FUNKSJONER FOR SUNDEE V2
