@@ -104,3 +104,132 @@ if __name__ == "__main__":
     upsert_rows("reservoir_levels", levels, "region,year,week")
 
     print("Done.")
+
+
+# ============================================================
+# NYE FUNKSJONER FOR SUNDEE V2
+# ============================================================
+
+def fetch_reservoir_zones():
+    """Henter magasinfylling per NO-sone fra NVE og skriver til reservoir_zones."""
+    url = "https://nvebiapi.nve.no/api/MagasinStatistikk/HentOffentligData"
+    r = requests.get(url, timeout=30)
+    r.raise_for_status()
+    data = r.json()
+    zone_map = {1: "NO1", 2: "NO2", 3: "NO3", 4: "NO4", 5: "NO5"}
+    rows = []
+    for rec in data:
+        if rec.get("omrType") != "EL":
+            continue
+        omrnr = rec.get("omrnr")
+        zone = zone_map.get(omrnr)
+        if not zone:
+            continue
+        rows.append({
+            "zone": zone,
+            "week_number": rec.get("uke"),
+            "year": rec.get("aar"),
+            "fill_pct": rec.get("fyllingsgrad"),
+            "median_pct": rec.get("medianFyllingsgrad"),
+            "min_pct": rec.get("minFyllingsgrad"),
+            "max_pct": rec.get("maxFyllingsgrad"),
+            "source": "NVE",
+            "fetched_at": now_utc()
+        })
+    return rows
+
+
+def fetch_spot_prices_new():
+    """Henter spotpriser og skriver til spot_prices-tabellen med timestamp."""
+    url = (
+        "https://api.energidataservice.dk/dataset/Elspotprices"
+        "?limit=200"
+        "&filter=%7B%22PriceArea%22:%5B%22NO1%22,%22NO2%22,%22NO3%22,%22NO4%22,%22NO5%22%5D%7D"
+        "&sort=HourDK%20DESC"
+    )
+    r = requests.get(url, timeout=30)
+    r.raise_for_status()
+    records = r.json().get("records", [])
+    rows = []
+    for rec in records:
+        hour_str = rec.get("HourUTC")
+        if not hour_str:
+            continue
+        rows.append({
+            "timestamp_utc": hour_str,
+            "zone": rec.get("PriceArea"),
+            "price_eur": round(rec.get("SpotPriceEUR", 0), 4) if rec.get("SpotPriceEUR") is not None else None,
+            "price_nok": round(rec.get("SpotPriceDKK", 0) / 10, 4) if rec.get("SpotPriceDKK") is not None else None,
+            "currency": "EUR",
+            "source": "Nord Pool",
+            "fetched_at": now_utc()
+        })
+    return rows
+
+
+def fetch_news_items():
+    """Henter nyhetsoverskrifter fra Nord Pool og Statnett RSS."""
+    sources = [
+        {
+            "name": "Statnett",
+            "url": "https://www.statnett.no/rss/",
+            "category": "grid"
+        },
+        {
+            "name": "NVE",
+            "url": "https://www.nve.no/rss/",
+            "category": "hydro"
+        },
+    ]
+    import xml.etree.ElementTree as ET
+    rows = []
+    for src in sources:
+        try:
+            r = requests.get(src["url"], timeout=15)
+            if r.status_code != 200:
+                continue
+            root = ET.fromstring(r.content)
+            ns = ""
+            for item in root.iter("item"):
+                title = item.findtext("title", "").strip()
+                link = item.findtext("link", "").strip()
+                pub_date = item.findtext("pubDate", "").strip()
+                description = item.findtext("description", "").strip()[:500]
+                if not title or not link:
+                    continue
+                try:
+                    from email.utils import parsedate_to_datetime
+                    published = parsedate_to_datetime(pub_date).isoformat() if pub_date else now_utc()
+                except Exception:
+                    published = now_utc()
+                rows.append({
+                    "title": title,
+                    "summary": description,
+                    "source": src["name"],
+                    "source_url": link,
+                    "category": src["category"],
+                    "published_at": published,
+                    "fetched_at": now_utc(),
+                    "is_active": True
+                })
+        except Exception as e:
+            print(f"Feil ved henting fra {src['name']}: {e}")
+    return rows
+
+
+    # Kjor nye V2-funksjoner
+    print("Fetching reservoir zones per NO1-NO5...")
+    zones = fetch_reservoir_zones()
+    upsert_rows("reservoir_zones", zones, "zone,week_number,year")
+
+    print("Fetching spot prices to new table...")
+    spot = fetch_spot_prices_new()
+    upsert_rows("spot_prices", spot, "timestamp_utc,zone")
+
+    print("Fetching news items...")
+    news = fetch_news_items()
+    if news:
+        supabase.table("news_items").insert(news).execute()
+        print(f"Inserted {len(news)} news items")
+
+    print("Sundee V2 fetch complete.")
