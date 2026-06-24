@@ -1,4 +1,5 @@
 import os
+import time
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
@@ -59,8 +60,10 @@ def fetch_power_prices():
                 })
                 zone_rows += 1
             print(f"  {zone}: {zone_rows} rader hentet")
+            time.sleep(2)  # respekter rate limit
         except Exception as e:
             print(f"  ERROR henting av {zone}: {e}")
+            time.sleep(2)  # vent ogsaa ved feil
     return all_rows
 
 
